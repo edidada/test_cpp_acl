@@ -1,0 +1,19 @@
+# Build directories
+build/
+cmake-build-*/
+out/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# vcpkg
+vcpkg_installed/
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
