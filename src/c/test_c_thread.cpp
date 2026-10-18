@@ -174,11 +174,16 @@ static void test_mutex(void)
 }
 
 /* ---- rwlock ----------------------------------------------------------
- * 注: ACL 在 Windows 上通过 acl_pthread_rwlock.h 定义 ACL_HAVE_NO_RWLOCK,
- * 但 acl_pthread_rwlock.c 源文件里对该宏的检查发生在 include 该头之前,
- * 导致 Windows 上 rwlock_* 函数虽然被声明却没有实际实现. 这里在 Windows 上跳过。
+ * 实测结论(CI 三平台 + 本地): acl_pthread_rwlock_* 在当前 master(含 v3.6.9)
+ * 的所有平台上都没有实现 —— acl_pthread_rwlock.c 的实现体被
+ *   #ifndef _GNU_SOURCE  +  #ifdef ACL_HAVE_NO_RWLOCK
+ * 双重守卫, 且对 ACL_HAVE_NO_RWLOCK 的检查发生在 include 定义该宏的头文件
+ * 之前, 所以该宏在编译 .c 时永远未定义, 实现整体被剔除:
+ *   - Windows: 头文件有声明(ACL_HAVE_NO_RWLOCK 经 _WIN32 定义)但链接缺实现;
+ *   - Linux/macOS: CI 链接报 undefined reference to acl_pthread_rwlock_*.
+ * 因此本测试在所有平台禁用这段调用(保留代码供查阅).
  * ---------------------------------------------------------- */
-#if !defined(_WIN32) && !defined(_WIN64)
+#if 0
 static void test_rwlock(void)
 {
 	printf("--- rwlock ---\n");
@@ -364,11 +369,8 @@ int main(void)
 	test_thread();
 	test_thread_pool();
 	test_mutex();
-#if !defined(_WIN32) && !defined(_WIN64)
-	test_rwlock();
-#else
-	printf("--- rwlock: skipped on Windows (ACL compile-order bug) ---\n");
-#endif
+	printf("--- rwlock: acl_pthread_rwlock_* has no compiled implementation on"
+		" Windows/Linux/macOS in this ACL version (see test body comment) ---\n");
 	test_cond();
 #if defined(_WIN32) || defined(_WIN64)
 	test_semaphore();

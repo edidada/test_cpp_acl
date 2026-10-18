@@ -245,6 +245,16 @@ static void test_pgsql_construct() {
 
 //////////////////////////////////////////////////////////////////////////
 int main() {
+	// CI pins a known-good official sqlite3.dll via this env var (GitHub
+	// Windows runners otherwise pick up an arbitrary sqlite3.dll from PATH,
+	// which made the dynamically-loaded sqlite path segfault).  Empty/absent
+	// means fall back to ACL's default PATH lookup.
+	const char* loadpath = getenv("ACL_DB_LOADPATH");
+	if (loadpath != NULL && *loadpath != '\0') {
+		printf("db client loadpath = %s\n", loadpath);
+		acl::db_sqlite::set_loadpath(loadpath);
+	}
+
 	acl::acl_cpp_init();
 
 	printf("acl_cpp verbose: %s\n", acl::acl_cpp_verbose());
