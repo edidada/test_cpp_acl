@@ -27,6 +27,7 @@ target("xmake_smoke")
             add_defines("_CRT_SECURE_NO_WARNINGS")
             add_cxflags("/utf-8", "/wd4819", "/wd4996", {force = true})
         end
-    else
-        add_syslinks("pthread", "dl")
     end
+    -- NOTE: the acl-dev package already contributes pthread/dl on Linux
+    -- and nothing extra on macOS (no libdl there), so no target-level
+    -- syslinks are needed outside of Windows.
