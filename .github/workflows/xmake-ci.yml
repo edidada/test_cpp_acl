@@ -1,0 +1,87 @@
+name: xmake CI
+
+on:
+  push:
+    branches: [xmake]
+  workflow_dispatch:
+
+jobs:
+  xmake:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            name: Linux (xmake + gcc-11)
+          - os: macos-14
+            name: macOS (xmake + clang)
+          - os: windows-2022
+            name: Windows (xmake + MSVC 2022)
+
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install toolchain (Linux gcc-11)
+        if: matrix.os == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-11 g++-11
+          echo "XMAKE_CC=gcc-11"  >> "$GITHUB_ENV"
+          echo "XMAKE_CXX=g++-11" >> "$GITHUB_ENV"
+
+      - name: Install toolchain (macOS clang-15, fallback system clang)
+        if: matrix.os == 'macos-14'
+        run: |
+          if brew install llvm@15 || brew list llvm@15 >/dev/null 2>&1; then
+            PREFIX="$(brew --prefix llvm@15 2>/dev/null || true)"
+            if [ -n "$PREFIX" ] && [ -x "$PREFIX/bin/clang++" ]; then
+              echo "XMAKE_CC=$PREFIX/bin/clang"   >> "$GITHUB_ENV"
+              echo "XMAKE_CXX=$PREFIX/bin/clang++" >> "$GITHUB_ENV"
+            else
+              echo "llvm@15 unusable, falling back to system clang"
+              echo "XMAKE_CC=clang"   >> "$GITHUB_ENV"
+              echo "XMAKE_CXX=clang++" >> "$GITHUB_ENV"
+            fi
+          else
+            echo "llvm@15 unavailable, falling back to system clang"
+            echo "XMAKE_CC=clang"   >> "$GITHUB_ENV"
+            echo "XMAKE_CXX=clang++" >> "$GITHUB_ENV"
+          fi
+
+      - name: Setup MSVC 2022 (windows)
+        if: matrix.os == 'windows-2022'
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Install xmake
+        uses: xmake-io/xmake-action@main
+
+      - name: Cache xmake packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.xmake/packages
+            ~/.cache/xmake
+          key: xmake-pkgs-${{ runner.os }}-${{ hashFiles('xmake.lua') }}
+          restore-keys: |
+            xmake-pkgs-${{ runner.os }}-
+
+      - name: Configure (xmake)
+        run: |
+          if [ -n "${XMAKE_CC:-}" ]; then
+            xmake f -m release -y -j 2 --cc="$XMAKE_CC" --cxx="$XMAKE_CXX"
+          else
+            xmake f -m release -y -j 2
+          fi
+
+      - name: Build (xmake, jobs capped at 2)
+        run: xmake -j2 -y
+
+      - name: Run smoke test (xmake run)
+        run: xmake run xmake_smoke
