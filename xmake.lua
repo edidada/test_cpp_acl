@@ -9,6 +9,10 @@ set_xmakever("2.7.9")
 add_rules("mode.debug", "mode.release")
 set_warnings("all")
 
+-- Required so that `xmake -y` fetches/builds the package automatically;
+-- add_packages() alone does NOT trigger installation.
+add_requires("acl-dev")
+
 target("xmake_smoke")
     set_kind("binary")
     set_languages("c++17")
@@ -23,10 +27,10 @@ target("xmake_smoke")
         -- OUTPUT_NAMEs: acl_cpp, protocol, fiber_cpp, fiber, acl.
         add_links("acl_cpp", "protocol", "fiber_cpp", "fiber", "acl")
         add_syslinks("ws2_32", "iphlpapi", "kernel32", "user32", "gdi32")
-        if is_msvc() then
-            add_defines("_CRT_SECURE_NO_WARNINGS")
-            add_cxflags("/utf-8", "/wd4819", "/wd4996", {force = true})
-        end
+        -- CI on Windows is MSVC 2022 only (ilammy/msvc-dev-cmd), and
+        -- is_msvc() is not available in the target description scope.
+        add_defines("_CRT_SECURE_NO_WARNINGS")
+        add_cxflags("/utf-8", "/wd4819", "/wd4996", {force = true})
     end
     -- NOTE: the acl-dev package already contributes pthread/dl on Linux
     -- and nothing extra on macOS (no libdl there), so no target-level

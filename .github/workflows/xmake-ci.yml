@@ -5,6 +5,12 @@ on:
     branches: [xmake]
   workflow_dispatch:
 
+env:
+  # ACL builds OOM the Linux runners and hit macOS posix_spawn limits when
+  # compiled fully parallel (cc1plus Killed); cap every xmake/cmake build,
+  # including acl-dev package builds, at 2 jobs.
+  XMAKE_JOBS: 2
+
 jobs:
   xmake:
     timeout-minutes: 90
@@ -22,6 +28,10 @@ jobs:
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
 
+    defaults:
+      run:
+        shell: bash
+
     steps:
       - uses: actions/checkout@v4
 
@@ -30,8 +40,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends gcc-11 g++-11
-          echo "CC=gcc-11" >> "$GITHUB_ENV"
-          echo "CXX=g++-11" >> "$GITHUB_ENV"
+          echo "XMAKE_CC=gcc-11"  >> "$GITHUB_ENV"
+          echo "XMAKE_CXX=g++-11" >> "$GITHUB_ENV"
 
       - name: Install clang-15 (macOS)
         if: runner.os == 'macOS'
@@ -40,11 +50,11 @@ jobs:
           timeout 900 brew install llvm@15 || echo "::notice::llvm@15 unavailable, falling back to default clang"
           if [ -x "$(brew --prefix llvm@15 2>/dev/null)/bin/clang++" ]; then
             LLVM15="$(brew --prefix llvm@15)"
-            echo "CC=$LLVM15/bin/clang"   >> "$GITHUB_ENV"
-            echo "CXX=$LLVM15/bin/clang++" >> "$GITHUB_ENV"
+            echo "XMAKE_CC=$LLVM15/bin/clang"   >> "$GITHUB_ENV"
+            echo "XMAKE_CXX=$LLVM15/bin/clang++" >> "$GITHUB_ENV"
           else
-            echo "CC=clang"   >> "$GITHUB_ENV"
-            echo "CXX=clang++" >> "$GITHUB_ENV"
+            echo "XMAKE_CC=clang"    >> "$GITHUB_ENV"
+            echo "XMAKE_CXX=clang++" >> "$GITHUB_ENV"
           fi
 
       - name: Setup MSVC 2022 (Windows)
@@ -54,7 +64,7 @@ jobs:
           arch: x64
 
       - name: Install xmake
-        uses: xmake-io/github-action-setup-xmake@master
+        uses: xmake-io/github-action-setup-xmake@v1.2.5
         with:
           xmake-version: latest
 
@@ -64,14 +74,27 @@ jobs:
           path: |
             ~/.xmake/packages
             ~/AppData/Local/xmake/packages
-          key: xmake-pkgs-${{ runner.os }}-acl-dev-3.6.7-v1
+          key: xmake-pkgs-${{ runner.os }}-acl-dev-3.6.7-v2
           restore-keys: xmake-pkgs-${{ runner.os }}-acl-dev-
 
       - name: Update xmake-repo
         run: xrepo update-repo
 
+      - name: Show toolchain
+        run: |
+          xmake --version
+          if [ -n "${XMAKE_CC:-}" ]; then
+            echo "CC=$XMAKE_CC"; "$XMAKE_CC" --version || true
+            echo "CXX=$XMAKE_CXX"; "$XMAKE_CXX" --version || true
+          fi
+
       - name: Configure (xmake)
-        run: xmake f -m release -y
+        run: |
+          if [ -n "${XMAKE_CC:-}" ]; then
+            xmake f -m release -y --cc="$XMAKE_CC" --cxx="$XMAKE_CXX"
+          else
+            xmake f -m release -y
+          fi
 
       - name: Build (xmake, parallelism capped at 2)
         run: xmake -j2 -y
