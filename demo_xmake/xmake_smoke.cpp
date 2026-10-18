@@ -73,13 +73,13 @@ int main(void)
 	// Trivial ACL C++ API: acl::string (also proves we link lib_acl_cpp).
 	acl::string s("hello-from-xmake");
 	s += "-acl-dev";
-	if (strcmp(s.str(), "hello-from-xmake-acl-dev") != 0)
+	if (strcmp(s.c_str(), "hello-from-xmake-acl-dev") != 0)
 	{
-		std::fprintf(stderr, "[xmake_smoke] acl::string mismatch: %s\n", s.str());
+		std::fprintf(stderr, "[xmake_smoke] acl::string mismatch: %s\n", s.c_str());
 		return 1;
 	}
 	std::printf("[xmake_smoke] acl::string   = %s (len=%u)\n",
-		s.str(), static_cast<unsigned>(s.length()));
+		s.c_str(), static_cast<unsigned>(s.length()));
 #endif
 
 	std::printf("[xmake_smoke] SUCCESS\n");

@@ -78,7 +78,15 @@ jobs:
           restore-keys: xmake-pkgs-${{ runner.os }}-acl-dev-
 
       - name: Update xmake-repo
-        run: xrepo update-repo
+        run: |
+          if command -v xrepo >/dev/null 2>&1; then
+            xrepo update-repo
+          else
+            # On Windows the action may not expose xrepo.exe to bash;
+            # xmake auto-fetches xmake-repo during package resolution anyway.
+            xmake --version
+            echo "xrepo not on PATH, skipping explicit repo update"
+          fi
 
       - name: Show toolchain
         run: |
