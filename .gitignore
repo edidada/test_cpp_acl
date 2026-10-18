@@ -3,6 +3,9 @@ build/
 cmake-build-*/
 out/
 
+# git worktrees for build-system branches
+.worktrees/
+
 # IDE
 .idea/
 .vscode/
