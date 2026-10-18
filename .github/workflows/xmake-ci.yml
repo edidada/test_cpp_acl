@@ -7,81 +7,74 @@ on:
 
 jobs:
   xmake:
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
         include:
           - os: ubuntu-22.04
-            name: Linux (xmake + gcc-11)
+            name: Linux (Ubuntu 22.04 / gcc-11)
           - os: macos-14
-            name: macOS (xmake + clang)
+            name: macOS (macos-14 / clang-15)
           - os: windows-2022
-            name: Windows (xmake + MSVC 2022)
+            name: Windows (windows-2022 / MSVC 2022)
 
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
 
-    defaults:
-      run:
-        shell: bash
-
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install toolchain (Linux gcc-11)
-        if: matrix.os == 'ubuntu-22.04'
+      - name: Install gcc-11 (Linux)
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y gcc-11 g++-11
-          echo "XMAKE_CC=gcc-11"  >> "$GITHUB_ENV"
-          echo "XMAKE_CXX=g++-11" >> "$GITHUB_ENV"
+          sudo apt-get install -y --no-install-recommends gcc-11 g++-11
+          echo "CC=gcc-11" >> "$GITHUB_ENV"
+          echo "CXX=g++-11" >> "$GITHUB_ENV"
 
-      - name: Install toolchain (macOS clang-15, fallback system clang)
-        if: matrix.os == 'macos-14'
+      - name: Install clang-15 (macOS)
+        if: runner.os == 'macOS'
         run: |
-          if brew install llvm@15 || brew list llvm@15 >/dev/null 2>&1; then
-            PREFIX="$(brew --prefix llvm@15 2>/dev/null || true)"
-            if [ -n "$PREFIX" ] && [ -x "$PREFIX/bin/clang++" ]; then
-              echo "XMAKE_CC=$PREFIX/bin/clang"   >> "$GITHUB_ENV"
-              echo "XMAKE_CXX=$PREFIX/bin/clang++" >> "$GITHUB_ENV"
-            else
-              echo "llvm@15 unusable, falling back to system clang"
-              echo "XMAKE_CC=clang"   >> "$GITHUB_ENV"
-              echo "XMAKE_CXX=clang++" >> "$GITHUB_ENV"
-            fi
+          # llvm@15 may be bottled or not; never let a source build eat the job.
+          timeout 900 brew install llvm@15 || echo "::notice::llvm@15 unavailable, falling back to default clang"
+          if [ -x "$(brew --prefix llvm@15 2>/dev/null)/bin/clang++" ]; then
+            LLVM15="$(brew --prefix llvm@15)"
+            echo "CC=$LLVM15/bin/clang"   >> "$GITHUB_ENV"
+            echo "CXX=$LLVM15/bin/clang++" >> "$GITHUB_ENV"
           else
-            echo "llvm@15 unavailable, falling back to system clang"
-            echo "XMAKE_CC=clang"   >> "$GITHUB_ENV"
-            echo "XMAKE_CXX=clang++" >> "$GITHUB_ENV"
+            echo "CC=clang"   >> "$GITHUB_ENV"
+            echo "CXX=clang++" >> "$GITHUB_ENV"
           fi
 
-      - name: Setup MSVC 2022 (windows)
-        if: matrix.os == 'windows-2022'
+      - name: Setup MSVC 2022 (Windows)
+        if: runner.os == 'Windows'
         uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
 
       - name: Install xmake
-        uses: xmake-io/xmake-action@main
+        uses: xmake-io/github-action-setup-xmake@master
+        with:
+          xmake-version: latest
 
       - name: Cache xmake packages
         uses: actions/cache@v4
         with:
           path: |
             ~/.xmake/packages
-            ~/.cache/xmake
-          key: xmake-pkgs-${{ runner.os }}-${{ hashFiles('xmake.lua') }}
-          restore-keys: |
-            xmake-pkgs-${{ runner.os }}-
+            ~/AppData/Local/xmake/packages
+          key: xmake-pkgs-${{ runner.os }}-acl-dev-3.6.7-v1
+          restore-keys: xmake-pkgs-${{ runner.os }}-acl-dev-
+
+      - name: Update xmake-repo
+        run: xrepo update-repo
 
       - name: Configure (xmake)
-        run: |
-          if [ -n "${XMAKE_CC:-}" ]; then
-            xmake f -m release -y -j 2 --cc="$XMAKE_CC" --cxx="$XMAKE_CXX"
-          else
-            xmake f -m release -y -j 2
-          fi
+        run: xmake f -m release -y
 
-      - name: Build (xmake, jobs capped at 2)
+      - name: Build (xmake, parallelism capped at 2)
         run: xmake -j2 -y
 
-      - name: Run smoke test (xmake run)
+      - name: Run smoke test (xmake run xmake_smoke)
         run: xmake run xmake_smoke

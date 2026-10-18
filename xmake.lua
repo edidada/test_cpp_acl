@@ -1,22 +1,32 @@
--- xmake demo build for the ACL network library smoke test.
--- Requires the official xmake-repo package "acl-dev".
-set_project("test_cpp_acl_xmake")
+-- Minimal xmake demo for the ACL network library, using the official
+-- xmake-repo package "acl-dev" (acl compiled from source, static libs).
+-- The full CMake suite on this repo is intentionally NOT ported here.
+
+set_project("test_cpp_acl-xmake")
 set_version("0.1.0")
+set_xmakever("2.7.9")
 
 add_rules("mode.debug", "mode.release")
-
-set_languages("c11", "cxx17")
 set_warnings("all")
-
--- Official xmake-repo package for github.com/acl-dev/acl
-add_requires("acl-dev")
 
 target("xmake_smoke")
     set_kind("binary")
-    add_files("demo_xmake/xmake_smoke.cpp")
+    set_languages("c++17")
+    add_files("demo_xmake/*.cpp")
     add_packages("acl-dev")
-    if is_plat("windows") then
+
+    if is_os("windows") then
+        -- The acl-dev CMake build defaults to the dynamic MSVC runtime.
+        set_runtimes("MD")
+        -- The recipe declares add_links only for non-Windows platforms;
+        -- on Windows the static import libs are named after the CMake
+        -- OUTPUT_NAMEs: acl_cpp, protocol, fiber_cpp, fiber, acl.
+        add_links("acl_cpp", "protocol", "fiber_cpp", "fiber", "acl")
         add_syslinks("ws2_32", "iphlpapi", "kernel32", "user32", "gdi32")
-    elseif is_plat("macosx", "linux", "bsd") then
+        if is_msvc() then
+            add_defines("_CRT_SECURE_NO_WARNINGS")
+            add_cxflags("/utf-8", "/wd4819", "/wd4996", {force = true})
+        end
+    else
         add_syslinks("pthread", "dl")
     end
